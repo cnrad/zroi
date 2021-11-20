@@ -90,7 +90,7 @@ const Main = styled(motion.div)`
 
 const Header = styled.div`
     position: absolute;
-    top: 5rem;
+    top: 7rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -100,11 +100,11 @@ const Title = styled.div`
     font-size: 3rem;
     color: #fff;
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
 `;
 
 const Description = styled.div`
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     color: #828cbf;
     font-weight: 400;
     text-align: center;
