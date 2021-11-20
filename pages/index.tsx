@@ -37,7 +37,11 @@ const Home: NextPage = () => {
             <Head>
                 <title>zroi</title>
             </Head>
-            <Main>
+            <Main
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.75, ease: [0, 0.75, 0.5, 1] }}
+            >
                 <Header>
                     <Title>zroi.</Title>
                     <Description>disposable ethereum wallets.</Description>
