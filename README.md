@@ -1,4 +1,4 @@
-![image](https://user-images.githubusercontent.com/83192247/142733611-8b522663-1e76-4d12-a377-f1a23d8ba629.png)
+![image](https://user-images.githubusercontent.com/83192247/142735107-edf3b3fd-a7b6-49e4-9134-425d673ac628.png)
 
 not sure why I made this, but here it is anyways I guess
 
