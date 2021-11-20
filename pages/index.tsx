@@ -99,6 +99,14 @@ const Header = styled.div`
     flex-direction: column;
     align-items: center;
     justify-content: center;
+
+    @media (max-height: 700px) {
+        top: 4rem;
+    }
+
+    @media (max-height: 500px) {
+        display: none;
+    }
 `;
 const Title = styled.div`
     font-size: 3rem;
