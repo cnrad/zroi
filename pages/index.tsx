@@ -40,7 +40,7 @@ const Home: NextPage = () => {
             <Main>
                 <Header>
                     <Title>zroi.</Title>
-                    <Description>untraceable, disposable wallets.</Description>
+                    <Description>disposable ethereum wallets.</Description>
                 </Header>
                 <InfoWrapper>
                     <InfoText>
