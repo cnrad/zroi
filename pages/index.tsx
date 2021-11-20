@@ -38,6 +38,10 @@ const Home: NextPage = () => {
                 <title>zroi</title>
             </Head>
             <Main>
+                <Header>
+                    <Title>zroi.</Title>
+                    <Description>untraceable, disposable wallets.</Description>
+                </Header>
                 <InfoWrapper>
                     <InfoText>
                         <span style={{ userSelect: "none", color: "#c9d1ff" }}>Phrase: </span>
@@ -79,12 +83,35 @@ const Main = styled(motion.div)`
     width: 100vw;
     height: 100vh;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
 `;
 
+const Header = styled.div`
+    position: absolute;
+    top: 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+`;
+const Title = styled.div`
+    font-size: 3rem;
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+`;
+
+const Description = styled.div`
+    font-size: 1.75rem;
+    color: #828cbf;
+    font-weight: 400;
+    text-align: center;
+`;
+
 const InfoWrapper = styled.div`
-    width: auto;
+    width: 100vw;
     height: auto;
     display: flex;
     flex-direction: column;
