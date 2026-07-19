@@ -1,85 +1,198 @@
 import type { NextPage } from "next";
 import Head from "next/head";
-import styled from "styled-components";
+import styled, { ThemeProvider } from "styled-components";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Chain, themes } from "../src/themes";
 
 type PhraseRes = {
     phrase: string;
     address: string;
 };
 
-const Home: NextPage = () => {
-    const copyAddress = () => {
-        navigator.clipboard.writeText(`0x118fE30C4957d918C015C5D3B85734af7579Ae35`);
-        setTextState("Copied.");
+// publicnode sustained 30/30 at 50ms, so 150ms leaves plenty of headroom
+const SCAN_INTERVAL = 150;
+// on a rate limit, back off from here and double up to the ceiling
+const BACKOFF_MIN = 1000;
+const BACKOFF_MAX = 15000;
 
-        setTimeout(() => setTextState("118fE30C4957d918C015C5D3B85734af7579Ae35"), 1000);
+// theme swap eases slowly; hover affordances snap
+const THEME = "400ms ease-out";
+const HOVER = "120ms ease-out";
+
+const Home: NextPage = () => {
+    const [chain, setChain] = useState<Chain>("ethereum");
+    const [seedPhrase, setSeedPhrase] = useState("...");
+    const [address, setAddress] = useState("...");
+    const [scanning, setScanning] = useState(false);
+    const [scanned, setScanned] = useState(0);
+    const [status, setStatus] = useState("");
+
+    // the scan loop reads this to notice a stop request mid-flight
+    const scanningRef = useRef(false);
+    const theme = themes[chain];
+
+    useEffect(() => {
+        // don't leave a loop running against an unmounted page
+        return () => {
+            scanningRef.current = false;
+        };
+    }, []);
+
+    const stopScan = () => {
+        scanningRef.current = false;
+        setScanning(false);
+    };
+
+    const toggleChain = () => {
+        stopScan();
+        setChain(chain === "ethereum" ? "solana" : "ethereum");
+
+        // the old address belongs to the old chain, so clear it out
+        setSeedPhrase("...");
+        setAddress("...");
+        setScanned(0);
+        setStatus("");
     };
 
     const fetchPhrase = () => {
+        stopScan();
+        setScanned(0);
+        setStatus("");
         setSeedPhrase("loading...");
         setAddress("loading...");
 
-        fetch("/api/genPhrase").then(async (res: Response) => {
+        fetch(`/api/genPhrase?chain=${chain}`).then(async (res: Response) => {
             let info: PhraseRes = await res.json();
             setSeedPhrase(info.phrase);
             setAddress(info.address);
         });
     };
 
-    const [textState, setTextState] = useState("118fE30C4957d918C015C5D3B85734af7579Ae35");
-    const [seedPhrase, setSeedPhrase] = useState("...");
-    const [address, setAddress] = useState("...");
+    const scan = async () => {
+        if (scanningRef.current) return stopScan();
+
+        scanningRef.current = true;
+        setScanning(true);
+        setScanned(0);
+
+        let count = 0;
+        let backoff = BACKOFF_MIN;
+
+        while (scanningRef.current) {
+            setStatus("checking...");
+
+            try {
+                let res = await fetch(`/api/scan?chain=${chain}`);
+                let info = await res.json();
+
+                // a stop landing mid-request shouldn't repaint the UI
+                if (!scanningRef.current) return;
+
+                if (!res.ok) {
+                    let wait = Math.round(backoff / 1000);
+
+                    setStatus(
+                        info?.rateLimited
+                            ? `rate limited, retrying in ${wait}s...`
+                            : `explorer unreachable, retrying in ${wait}s...`
+                    );
+
+                    await sleep(backoff);
+                    backoff = Math.min(backoff * 2, BACKOFF_MAX);
+                    continue;
+                }
+
+                // a clean response means the pressure is off
+                backoff = BACKOFF_MIN;
+                count++;
+                setScanned(count);
+                setSeedPhrase(info.phrase);
+                setAddress(info.address);
+
+                if (info.active) {
+                    // leave the hit on screen rather than scanning past it
+                    setStatus("activity found — stopped.");
+                    return stopScan();
+                }
+
+                setStatus("no activity, continuing...");
+            } catch {
+                if (!scanningRef.current) return;
+
+                setStatus(`network error, retrying in ${Math.round(backoff / 1000)}s...`);
+                await sleep(backoff);
+                backoff = Math.min(backoff * 2, BACKOFF_MAX);
+                continue;
+            }
+
+            await sleep(SCAN_INTERVAL);
+        }
+    };
 
     return (
-        <>
-            <Head>
-                <title>zroi</title>
-            </Head>
-            <Main
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.75, ease: [0, 0.75, 0.5, 1] }}
-            >
-                <Header>
-                    <Title>zroi.</Title>
-                    <Description>disposable ethereum wallets.</Description>
-                </Header>
-                <InfoWrapper>
-                    <InfoText>
-                        <span style={{ userSelect: "none", color: "#c9d1ff" }}>Phrase: </span>
-                        {seedPhrase}
-                    </InfoText>
-                    <InfoText>
-                        <span style={{ userSelect: "none", color: "#c9d1ff" }}>Address: </span>
-                        {address}
-                    </InfoText>
+        <ThemeProvider theme={theme}>
+            <>
+                <Head>
+                    <title>zroi</title>
+                </Head>
+                <Main
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.75, ease: [0, 0.75, 0.5, 1] }}
+                >
+                    <Header>
+                        <Title>zroi.</Title>
+                        <Description>
+                            disposable{" "}
+                            <ChainToggle onClick={toggleChain} title="switch chain">
+                                {chain}
+                                <ToggleIcon>
+                                    <Reload color="currentColor" />
+                                </ToggleIcon>
+                            </ChainToggle>{" "}
+                            wallets.
+                        </Description>
+                    </Header>
+                    <InfoWrapper>
+                        <InfoText>
+                            <Label>Phrase: </Label>
+                            {seedPhrase}
+                        </InfoText>
+                        <InfoText>
+                            <Label>Address: </Label>
+                            {address}
+                        </InfoText>
 
-                    <GenButton
-                        initial={{ background: "rgba(0, 0, 0, 0)" }}
-                        whileHover={{ background: "rgba(39, 38, 66, 1)", cursor: "pointer" }}
-                        whileTap={{ scale: 0.92 }}
-                        transition={{ duration: 0.1, ease: "easeInOut" }}
-                        onClick={fetchPhrase}
-                    >
-                        <Reload color="#fff">Generate Seed Phrase</Reload>
-                    </GenButton>
-                </InfoWrapper>
-                <Donate>
-                    <span style={{ color: "#616192" }}>Donate</span>
-                    <Address
-                        style={{ filter: "drop-shadow(0 0 0px #4225e6)" }}
-                        whileHover={{ cursor: "pointer", filter: "drop-shadow(0 0 4px #4225e6)" }}
-                        transition={{ duration: 0.15, ease: "easeInOut" }}
-                        onClick={copyAddress}
-                    >
-                        <motion.span style={{ color: "#808091" }}>{textState == "Copied." ? "" : "0x"}</motion.span>
-                        {textState}
-                    </Address>
-                </Donate>
-            </Main>
-        </>
+                        <GenButton
+                            initial={{ background: "rgba(0, 0, 0, 0)" }}
+                            whileHover={{ background: theme.hover, cursor: "pointer" }}
+                            whileTap={{ scale: 0.92 }}
+                            transition={{ duration: 0.1, ease: "easeInOut" }}
+                            onClick={fetchPhrase}
+                        >
+                            <Reload color="#fff" />
+                        </GenButton>
+                    </InfoWrapper>
+                    <ScanArea>
+                        <ScanStatus>
+                            {scanned > 0 && `${scanned.toLocaleString()} checked`}
+                            {scanned > 0 && status && " — "}
+                            {status}
+                        </ScanStatus>
+                        <ScanButton
+                            initial={{ background: "rgba(0, 0, 0, 0)" }}
+                            whileHover={{ background: theme.hover, cursor: "pointer" }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={{ duration: 0.1, ease: "easeInOut" }}
+                            onClick={scan}
+                        >
+                            {scanning ? "Stop" : "Scan"}
+                        </ScanButton>
+                    </ScanArea>
+                </Main>
+            </>
+        </ThemeProvider>
     );
 };
 
@@ -117,9 +230,52 @@ const Title = styled.div`
 
 const Description = styled.div`
     font-size: 1.5rem;
-    color: #828cbf;
+    color: ${props => props.theme.subtle};
     font-weight: 400;
     text-align: center;
+    transition: color ${THEME};
+`;
+
+const ToggleIcon = styled.span`
+    display: inline-flex;
+    align-items: center;
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    vertical-align: -0.15em;
+    transition: width ${HOVER}, opacity ${HOVER}, margin-left ${HOVER};
+
+    svg {
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+    }
+`;
+
+const ChainToggle = styled.span`
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1em 0.22em;
+    margin: 0 -0.15em;
+    border-radius: 0.25rem;
+    color: ${props => props.theme.label};
+    background: rgba(255, 255, 255, 0);
+    user-select: none;
+    transition: color ${THEME}, background ${HOVER}, padding ${HOVER}, margin ${HOVER};
+
+    &:hover {
+        cursor: pointer;
+        padding: 0.1em 0.36em;
+        margin: 0 -0.15em;
+        background: ${props => props.theme.hover};
+    }
+
+    /* the only child span is the reload icon */
+    &:hover > span {
+        width: 1em;
+        opacity: 1;
+        margin-left: 0.35em;
+    }
 `;
 
 const InfoWrapper = styled.div`
@@ -139,34 +295,51 @@ const GenButton = styled(motion.button)`
 `;
 
 const InfoText = styled(motion.div)`
-    color: #97a1f0;
+    color: ${props => props.theme.info};
     font-size: 1.35rem;
     font-weight: semibold;
     font-family: Roboto Mono;
     margin-bottom: 1rem;
     text-align: center;
+    transition: color ${THEME};
 `;
 
-const Donate = styled(motion.div)`
+const Label = styled.span`
+    user-select: none;
+    color: ${props => props.theme.label};
+    transition: color ${THEME};
+`;
+
+const ScanArea = styled.div`
     position: absolute;
     bottom: 2rem;
-    width: 100%;
-    color: #363c59;
-    font-size: 1.15rem;
-    font-weight: semibold;
-    font-family: Roboto Mono;
-    user-select: none;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
 `;
 
-const Address = styled(motion.p)`
-    color: #e5e5e7;
-    font-size: 0.95rem;
-    font-weight: semibold;
+const ScanStatus = styled.div`
+    height: 1.2em;
+    color: ${props => props.theme.subtle};
+    font-size: 0.9rem;
     font-family: Roboto Mono;
     user-select: none;
-    margin: 0.5rem;
+    transition: color ${THEME};
 `;
+
+const ScanButton = styled(motion.button)`
+    padding: 0.3rem 1rem;
+    border-radius: 0.2rem;
+    border: none;
+    color: ${props => props.theme.info};
+    background: none;
+    font-family: Roboto Mono;
+    font-size: 0.85rem;
+    transition: color ${THEME}, border-color ${THEME};
+`;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default Home;
 
